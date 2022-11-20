@@ -149,7 +149,7 @@ def make_command(command, wallet, param):
     headers = {
         'Content-Type': 'text/plain',
     }
-    url = f'http://nostrnode:{rpcpass}@{host}:{port}'
+    url = f'http://nostrnode:{rpcpass}@localhost:{port}'
     if wallet != "":
         url += f'/wallet/{wallet}'
     req_id = uuid.uuid4().hex
