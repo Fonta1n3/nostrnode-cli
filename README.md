@@ -4,6 +4,7 @@ This is the cli version of nostrnode. This should be considered the more secure 
 no javascript or html.
 
 ## Installation
+You need python 3.9.
 ```bash
 git clone nostrnode-cli...
 cd nostrnode-cli
