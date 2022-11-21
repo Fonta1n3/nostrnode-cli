@@ -2,8 +2,8 @@
 
 ⚠️ This is beta! Use at your own risk.
 
-This is the cli version of [nostrnode](https://github.com/Fonta1n3/nostrnode), see the link for more info . nostrnode 
-should be considered the more secure version as it has fewer dependencies and no javascript!
+This is the cli version of [nostrnode](https://github.com/Fonta1n3/nostrnode). nostrnode-cli 
+has fewer dependencies and is pure python, set it up as a service alongside Bitcoin Core.
 
 ## Installation
 You need python 3.9.
