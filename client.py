@@ -58,7 +58,7 @@ async def listen():
         while True:
             msg = await ws.recv()
             msg_json = json.loads(msg)
-            msg_type =  msg_json[0]
+            msg_type = msg_json[0]
             if msg_type == 'EOSE':
                 print(f'{msg_json}')
             elif msg_type == 'EVENT':
@@ -129,8 +129,8 @@ def parse_event(event):
 
 
 def parse_received_command(json_content):
-    command: str = None
-    wallet = ""
+    command: str = ''
+    wallet = ''
     param_value: dict = None
     if "command" in json_content:
         command = json_content['command']
@@ -139,9 +139,7 @@ def parse_received_command(json_content):
     if "paramDict" in json_content:
         param_dict = json_content['paramDict']
         param_value = param_dict['param']
-        if param_value == "":
-            param_value = []
-
+        
     return command, wallet, param_value
 
 
@@ -149,7 +147,7 @@ def make_command(command, wallet, param):
     headers = {
         'Content-Type': 'text/plain',
     }
-    url = f'http://nostrnode:{rpcpass}@localhost:{port}'
+    url = f"http://nostrnode:{rpcpass}@localhost:{port}"
     if wallet != "":
         url += f'/wallet/{wallet}'
     req_id = uuid.uuid4().hex

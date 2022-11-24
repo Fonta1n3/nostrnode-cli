@@ -1,3 +1,5 @@
+# Copied from https://github.com/monty888/nostrpy
+
 from datetime import datetime
 import json
 from json import JSONDecodeError
