@@ -1,6 +1,7 @@
 from base64 import b64decode, b64encode
 from datetime import datetime
 from event import Event
+from getpass import getpass
 import websockets
 import asyncio
 import pathlib
@@ -13,7 +14,6 @@ import encryption
 import rpcauth
 import hashlib
 import requests
-from getpass import getpass
 
 
 relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
@@ -36,9 +36,8 @@ if encryption_words == "":
     print('Encryption words are required, start over.')
     quit()
 
-rpcpass = rpcauth.main()
-rpcuser = 'nostrnode'
-
+RPC_PASS = rpcauth.main()
+RPC_USER = 'nostrnode'
 OUR_PRIVKEY = secp256k1.PrivateKey()
 OUR_PRIVKEY_SERIALIZED = OUR_PRIVKEY.serialize()
 OUR_PUBKEY = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
@@ -46,10 +45,7 @@ print(f'Subscribe Fully Noded to this pubkey: {OUR_PUBKEY}')
 
 
 async def listen():
-    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
-    ssl_context.load_verify_locations(cafile=f'{pathlib.Path(__file__).parent}/cert.pem')
-
-    async with websockets.connect(relay_url, ssl=ssl_context) as ws:
+    async with websockets.connect(relay_url, ssl=ssl_context('cert.pem')) as ws:
         req = ['REQ', sub_id, {'authors': [light_client_pubkey[2:]]}]
         print(f'Sent: {req} to {relay_url}')
         await ws.send(json.dumps(req))
@@ -63,6 +59,12 @@ async def listen():
                 event = msg_parse(msg_json)
                 if event is not None:
                     await ws.send(event)
+
+
+def ssl_context(filename):
+    context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+    context.load_verify_locations(cafile=f'{pathlib.Path(__file__).parent}/{filename}')
+    return context
 
 
 def msg_parse(msg_json):
@@ -84,10 +86,19 @@ def parse_event(event):
             if is_btc_rpc(port):
                 response = make_btc_command(command, wallet, param_json, port, request_id)
                 json_content = parse_response(response)
-                btc_response = parse_btc_response(json_content)
-                our_response_to_send = our_response(btc_response, request_id)
-                print(f'send event: {our_response_to_send}')
-                return our_response_to_send
+                if json_content is not None:
+                    btc_response = parse_btc_response(json_content)
+                    if btc_response is not None:
+                        our_response_to_send = our_btc_response(btc_response, request_id)
+                        if our_response_to_send is not None:
+                            print(f'send event: {our_response_to_send}')
+                            return our_response_to_send
+
+            elif is_jm_rpc(port):
+                (http_method, url_path, http_body, token) = parse_jm_command(json_content)
+                response = make_jm_command(http_method, url_path, http_body, token)
+                our_jm_response_to_send = our_jm_response(response.content)
+                return our_jm_response_to_send
 
 
 def is_btc_rpc(port):
@@ -95,6 +106,10 @@ def is_btc_rpc(port):
         return True
     else:
         return False
+
+
+def is_jm_rpc(port):
+    return port == 28183
 
 
 def parse_response(response):
@@ -105,19 +120,33 @@ def parse_response(response):
 
 
 def parse_btc_response(json_content):
-    if not json_content["error"] is None:
+    if json_content["error"] is not None:
         error_check = json_content["error"]
         if "message" in error_check:
             print(f'ERROR: {error_check["message"]}')
-
             return error_check["message"]
     else:
         if "result" in json_content:
-
             return json_content
 
 
-def our_response(btc_response, request_id):
+def parse_jm_command(json_content):
+    url_path = None
+    http_method = None
+    http_body = None
+    token = None
+    if 'http_method' in json_content:
+        http_method = json_content["http_method"]
+    if 'url_path' in json_content:
+        url_path = json_content["url_path"]
+    if 'http_body' in json_content:
+        http_body = json_content["http_body"]
+    if 'token' in json_content:
+        token = json_content["token"]
+    return http_method, url_path, http_body, token
+
+
+def our_btc_response(btc_response, request_id):
     result: dict = None
     message: str = ''
     if 'result' in btc_response:
@@ -133,9 +162,20 @@ def our_response(btc_response, request_id):
     event = create_event(json_response_data)
     event.sign(OUR_PRIVKEY_SERIALIZED)
     if event.is_valid():
-        e = ['EVENT', event.event_data()]
+        return json.dumps(['EVENT', event.event_data()])
+    else:
+        print('Event invalid!')
 
-        return json.dumps(e)
+
+def our_jm_response(json_content):
+    response_dict = {
+        "response": json.loads(json_content)
+    }
+    json_response_data = json.dumps(response_dict).encode('utf8')
+    event = create_event(json_response_data)
+    event.sign(OUR_PRIVKEY_SERIALIZED)
+    if event.is_valid():
+        return json.dumps(['EVENT', event.event_data()])
     else:
         print('Event invalid!')
 
@@ -164,7 +204,6 @@ def create_event(json_response_data):
         'content': b64_encrypted_content,
         'sig': None
     }
-
     return Event.from_JSON(event_dict)
 
 
@@ -184,7 +223,6 @@ def parse_received_command(json_content):
         port = json_content['port']
     if "request_id" in json_content:
         request_id = json_content['request_id']
-
     return command, wallet, param_value, port, request_id
 
 
@@ -192,13 +230,43 @@ def make_btc_command(command, wallet, param, port, request_id):
     headers = {
         'Content-Type': 'text/plain',
     }
-    url = f"http://nostrnode:{rpcpass}@localhost:{port}"
+    url = f"http://{RPC_USER}:{RPC_PASS}@localhost:{port}"
     if wallet != "":
         url += f'/wallet/{wallet}'
     data = {'jsonrpc': '1.0', 'id': request_id, 'method': command, 'params': param}
     json_data = json.dumps(data)
+    return requests.post(url,
+                         data=json_data.encode('utf8'),
+                         headers=headers,
+                         auth=(f'{RPC_USER}', f'{RPC_PASS}'))
 
-    return requests.post(url, data=json_data.encode('utf8'), headers=headers, auth=('nostrnode', f'{rpcpass}'))
+
+def get_headers(param, token):
+    headers = {}
+    if param != {}:
+        headers['Content-Type'] = 'application/json'
+        headers['Content-Length'] = f'{len(json.dumps(param).encode("utf8"))}'
+    else:
+        headers['Content-Type'] = 'text/plain'
+    if token is not None:
+        headers["Authorization"] = f'Bearer {token}'
+    return headers
+
+
+# Requires you to copy nostrnode-cli/jm_cert.pem to jmdatadir/ssl/cert.pem
+def make_jm_command(http_method, url_path, http_body, token):
+    url = f"https://localhost:28183/{url_path}"
+    cert_path = f'{pathlib.Path(__file__).parent}/jm_cert.pem'
+    if http_method == 'GET':
+        return requests.get(url,
+                            data=http_body,
+                            headers=get_headers(http_body, token),
+                            verify=cert_path)
+    elif http_method == 'POST':
+        return requests.post(url,
+                             json=http_body,
+                             headers=get_headers(http_body, token),
+                             verify=cert_path)
 
 
 def listen_until_complete():

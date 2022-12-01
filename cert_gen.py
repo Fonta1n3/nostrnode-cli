@@ -81,6 +81,7 @@ def gen():
     parent = pathlib.Path(__file__).parents[0]
     client_key_path = f'{parent}/key.pem'
     client_cert_path = f'{parent}/cert.pem'
+    jm_cert_path = f'{parent}/jm_cert.pem'
 
     with open(client_key_path, 'w') as clientkey:
         key = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, cakey).decode('ascii')
@@ -91,5 +92,11 @@ def gen():
             cert = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cacert).decode('ascii')
             clientcert.write(cert)
             clientcert.seek(0)
-            client.listen_until_complete()
+            #client.listen_until_complete()
+
+            with open(jm_cert_path, 'w') as jmclientcert:
+                cert = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cacert).decode('ascii')
+                jmclientcert.write(cert)
+                jmclientcert.seek(0)
+                client.listen_until_complete()
 
