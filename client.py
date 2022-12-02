@@ -15,7 +15,6 @@ import rpcauth
 import hashlib
 import requests
 
-
 relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
 default_relay: str = 'wss://nostr-relay.wlvs.space/'
 relay_url = input(relay_input_prompt) or default_relay
@@ -25,10 +24,10 @@ pubkey_prompt = 'Subscription pubkey (required): '
 light_client_pubkey = input(pubkey_prompt)
 
 if light_client_pubkey == '':
-    print('Fully Noded pubkey required, start over.')
+    print('Pubkey required, start over.')
     quit()
 
-encryption_input_prompt = 'Enter nostr encryption words from Fully Noded (required): '
+encryption_input_prompt = 'Enter nostr encryption words (required): '
 encryption_words = getpass(encryption_input_prompt)
 encryption_words = "".join(encryption_words.split())
 
@@ -41,7 +40,7 @@ RPC_USER = 'nostrnode'
 OUR_PRIVKEY = secp256k1.PrivateKey()
 OUR_PRIVKEY_SERIALIZED = OUR_PRIVKEY.serialize()
 OUR_PUBKEY = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
-print(f'Subscribe Fully Noded to this pubkey: {OUR_PUBKEY}')
+print(f'Subscribe to this pubkey (required): {OUR_PUBKEY}')
 
 
 async def listen():
@@ -83,6 +82,7 @@ def parse_event(event):
             decrypted_content = encryption.decrypt(b64decode(value), encryption_words)
             json_content = json.loads(decrypted_content)
             (command, wallet, param_json, port, request_id) = parse_received_command(json_content)
+
             if is_btc_rpc(port):
                 response = make_btc_command(command, wallet, param_json, port, request_id)
                 json_content = parse_response(response)
@@ -230,13 +230,12 @@ def make_btc_command(command, wallet, param, port, request_id):
     headers = {
         'Content-Type': 'text/plain',
     }
-    url = f"http://{RPC_USER}:{RPC_PASS}@localhost:{port}"
+    endpoint = f"http://{RPC_USER}:{RPC_PASS}@localhost:{port}"
     if wallet != "":
-        url += f'/wallet/{wallet}'
-    data = {'jsonrpc': '1.0', 'id': request_id, 'method': command, 'params': param}
-    json_data = json.dumps(data)
-    return requests.post(url,
-                         data=json_data.encode('utf8'),
+        endpoint += f'/wallet/{wallet}'
+    json_data = {'jsonrpc': '1.0', 'id': request_id, 'method': command, 'params': param}
+    return requests.post(endpoint,
+                         json=json_data,
                          headers=headers,
                          auth=(f'{RPC_USER}', f'{RPC_PASS}'))
 
@@ -253,17 +252,17 @@ def get_headers(param, token):
     return headers
 
 
-# Requires you to copy nostrnode-cli/jm_cert.pem to jmdatadir/ssl/cert.pem
+# Requires you to copy nostrnode-cli/jm_cert.pem and key.pem to jmdatadir/ssl/cert.pem and key.pem prior to starting jm
 def make_jm_command(http_method, url_path, http_body, token):
-    url = f"https://localhost:28183/{url_path}"
+    endpoint = f"https://localhost:28183/{url_path}"
     cert_path = f'{pathlib.Path(__file__).parent}/jm_cert.pem'
     if http_method == 'GET':
-        return requests.get(url,
+        return requests.get(endpoint,
                             data=http_body,
                             headers=get_headers(http_body, token),
                             verify=cert_path)
     elif http_method == 'POST':
-        return requests.post(url,
+        return requests.post(endpoint,
                              json=http_body,
                              headers=get_headers(http_body, token),
                              verify=cert_path)
