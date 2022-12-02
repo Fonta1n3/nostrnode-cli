@@ -75,7 +75,7 @@ def createCertificate(req, issuerCertKey, serial, validityPeriod, digest="sha256
 
 def gen():
     cakey = createKeyPair(TYPE_RSA, 1024)
-    careq = createCertRequest(cakey, CN='Certificate Authority')
+    careq = createCertRequest(cakey, CN='localhost')
     cacert = createCertificate(careq, (careq, cakey), 0, (0, 60 * 60 * 24 * 365))  # one year
 
     parent = pathlib.Path(__file__).parents[0]
