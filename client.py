@@ -15,6 +15,13 @@ import rpcauth
 import hashlib
 import requests
 
+# TODO: Currently if we attempt to send a command to a service that is off nostrnode crashes
+# TODO: Create db to store credentials encrypted, removing them from memory when not in use
+# TODO: Embed a relay? join market?
+# TODO: Sanity checks for user input
+# TODO: One method to parse/build all commands/responses
+
+
 relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
 default_relay: str = 'wss://nostr-relay.wlvs.space/'
 relay_url = input(relay_input_prompt) or default_relay
@@ -41,6 +48,10 @@ OUR_PRIVKEY = secp256k1.PrivateKey()
 OUR_PRIVKEY_SERIALIZED = OUR_PRIVKEY.serialize()
 OUR_PUBKEY = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
 print(f'Subscribe to this pubkey (required): {OUR_PUBKEY}')
+
+SPARKO_KEY = secp256k1.PrivateKey()
+SPARKO_KEY_SERIALIZED = SPARKO_KEY.serialize()
+print(f'Add this full access Sparko key to your lightning config: {SPARKO_KEY_SERIALIZED}')
 
 
 async def listen():
@@ -85,21 +96,32 @@ def parse_event(event):
 
             if is_btc_rpc(port):
                 response = make_btc_command(command, wallet, param_json, port, request_id)
+                print(f'Bitcoin Core response http status code: {response.status_code}')
                 json_content = parse_response(response)
                 if json_content is not None:
                     btc_response = parse_btc_response(json_content)
                     if btc_response is not None:
                         our_response_to_send = our_btc_response(btc_response, request_id)
                         if our_response_to_send is not None:
-                            print(f'send event: {our_response_to_send}')
+                            print(f'send Bitcoin Core event: {our_response_to_send}')
                             return our_response_to_send
 
             elif is_jm_rpc(port):
                 (http_method, url_path, http_body, token) = parse_jm_command(json_content)
                 response = make_jm_command(http_method, url_path, http_body, token)
+                print(f'Join market response http status code: {response.status_code}')
                 our_jm_response_to_send = our_jm_response(response.content)
+                print(f'send Join Market event: {our_jm_response_to_send}')
                 return our_jm_response_to_send
 
+            elif is_cln(port):
+                if 'http_body' in json_content:
+                    http_body = json_content["http_body"]
+                    response = make_cln_command(http_body)
+                    print(f'Core lightning response http status code: {response.status_code}')
+                    our_cln_response = our_jm_response(response.content)
+                    print(f'send Core Lightning event: {our_cln_response}')
+                    return our_cln_response
 
 def is_btc_rpc(port):
     if port == 8332 or port == 18443 or port == 38332 or port == 18332:
@@ -112,9 +134,11 @@ def is_jm_rpc(port):
     return port == 28183
 
 
+def is_cln(port):
+    return port == 9737
+
+
 def parse_response(response):
-    if response.status_code != 200:
-        print(f'http status code: {response.status_code}')
     if response.status_code == 200:
         return json.loads(response.content)
 
@@ -266,6 +290,18 @@ def make_jm_command(http_method, url_path, http_body, token):
                              json=http_body,
                              headers=get_headers(http_body, token),
                              verify=cert_path)
+
+
+def make_cln_command(http_body):
+    endpoint = "http://localhost:9737/rpc"
+    if 'params' in http_body:
+        param = http_body['params']
+        if param == ['']:
+            http_body['params'] = []
+    headers = {
+        'X-Access': SPARKO_KEY_SERIALIZED
+    }
+    return requests.post(endpoint, json=http_body, headers=headers)
 
 
 def listen_until_complete():
