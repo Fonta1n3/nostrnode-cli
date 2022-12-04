@@ -123,6 +123,7 @@ def parse_event(event):
                     print(f'send Core Lightning event: {our_cln_response}')
                     return our_cln_response
 
+
 def is_btc_rpc(port):
     if port == 8332 or port == 18443 or port == 38332 or port == 18332:
         return True
