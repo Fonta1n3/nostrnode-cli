@@ -1,6 +1,6 @@
 # nostrnode-cli
 
-⚠️ This is alpha! Use at your own risk! It is under development but works. Please open issues, submit PR's or reach out.
+⚠️ 🛠 nostrnode is alpha and under active development. Use at your own risk. Please open issues, submit PR's or reach out.
 
 ## What problem does nostrnode solve?
 Using multiple Tor endpoints to speak to multiple Bitcoin related services simultaneously via a light client is an incredibly
@@ -40,7 +40,7 @@ If a user wants to stop remote access they just quit nostrnode, all services wil
 `localhost`. nostrnode is hardcoded to only issue rpc to `localhost`.
 
 ### It's fast!
-It is much faster then using Tor or some VPNs. That is not to say you shouldn't use nostrnode or a client without a VPN or 
+It is much faster than using Tor or some VPNs. That is not to say you shouldn't use nostrnode or a client without a VPN or 
 Tor! nostr is not mutually exclusive to Tor or VPNs, you can use all of the above simultaneously on clients and servers.
 We can run the nostr socket on Tor and it will still be faster than talking to multiple Tor endpoints via http.
 
