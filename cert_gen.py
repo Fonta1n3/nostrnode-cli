@@ -1,3 +1,6 @@
+# Copied and edited from StackOverflow:
+# https://stackoverflow.com/questions/27164354/create-a-self-signed-x509-certificate-in-python
+from pathlib import Path
 import pathlib
 import OpenSSL
 
@@ -78,25 +81,27 @@ def gen():
     careq = createCertRequest(cakey, CN='localhost')
     cacert = createCertificate(careq, (careq, cakey), 0, (0, 60 * 60 * 24 * 365))  # one year
 
-    parent = pathlib.Path(__file__).parents[0]
+    parent = Path(__file__).parents[0]
     client_key_path = f'{parent}/key.pem'
     client_cert_path = f'{parent}/cert.pem'
     jm_cert_path = f'{parent}/jm_cert.pem'
 
-    with open(client_key_path, 'w') as clientkey:
-        key = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, cakey).decode('ascii')
-        clientkey.write(key)
-        clientkey.seek(0)
+    existing_key = Path(client_key_path)
+    if not existing_key.is_file():
+        with open(client_key_path, 'w') as clientkey:
+            key = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, cakey).decode('ascii')
+            clientkey.write(key)
+            clientkey.seek(0)
 
-        with open(client_cert_path, 'w') as clientcert:
-            cert = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cacert).decode('ascii')
-            clientcert.write(cert)
-            clientcert.seek(0)
-            #client.listen_until_complete()
-
-            with open(jm_cert_path, 'w') as jmclientcert:
+            with open(client_cert_path, 'w') as clientcert:
                 cert = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cacert).decode('ascii')
-                jmclientcert.write(cert)
-                jmclientcert.seek(0)
-                client.listen_until_complete()
+                clientcert.write(cert)
+                clientcert.seek(0)
 
+                with open(jm_cert_path, 'w') as jmclientcert:
+                    cert = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, cacert).decode('ascii')
+                    jmclientcert.write(cert)
+                    jmclientcert.seek(0)
+                    client.listen_until_complete()
+    else:
+        client.listen_until_complete()
