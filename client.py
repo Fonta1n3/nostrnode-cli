@@ -97,10 +97,12 @@ def parse_event(event):
             if is_btc_rpc(port):
                 response = make_btc_command(command, wallet, param_json, port, request_id)
                 print(f'Bitcoin Core response http status code: {response.status_code}')
+                print(response.content)
                 json_content = parse_response(response)
                 if json_content is not None:
                     btc_response = parse_btc_response(json_content)
                     if btc_response is not None:
+                        print(f'btc_response: {btc_response}')
                         our_response_to_send = our_btc_response(btc_response, request_id)
                         if our_response_to_send is not None:
                             print(f'send Bitcoin Core event: {our_response_to_send}')
@@ -140,19 +142,13 @@ def is_cln(port):
 
 
 def parse_response(response):
-    if response.status_code == 200:
+    if response.status_code == 200 or response.status_code == 500:
         return json.loads(response.content)
 
 
 def parse_btc_response(json_content):
-    if json_content["error"] is not None:
-        error_check = json_content["error"]
-        if "message" in error_check:
-            print(f'ERROR: {error_check["message"]}')
-            return error_check["message"]
-    else:
-        if "result" in json_content:
-            return json_content
+    print(f'parse_btc_response: {json_content}')
+    return json_content
 
 
 def parse_jm_command(json_content):
@@ -176,8 +172,12 @@ def our_btc_response(btc_response, request_id):
     message: str = ''
     if 'result' in btc_response:
         result = btc_response["result"]
-    if 'message' in btc_response:
-        message = btc_response["message"]
+    if 'error' in btc_response:
+        btc_error = btc_response["error"]
+        if btc_error is not None:
+            if 'message' in btc_error:
+                if btc_error["message"] is not None:
+                    message = btc_error["message"]
     part = {
         "request_id": request_id,
         "response": result,
@@ -295,13 +295,10 @@ def make_jm_command(http_method, url_path, http_body, token):
 
 def make_cln_command(http_body):
     endpoint = "http://localhost:9737/rpc"
-    if 'params' in http_body:
-        param = http_body['params']
-        if param == ['']:
-            http_body['params'] = []
     headers = {
         'X-Access': SPARKO_KEY_SERIALIZED
     }
+    print(f'http_body: {http_body}')
     return requests.post(endpoint, json=http_body, headers=headers)
 
 
