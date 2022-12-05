@@ -3,8 +3,8 @@
 ⚠️ 🛠 nostrnode is alpha and under active development. Use at your own risk. Please open issues, submit PR's or reach out.
 
 ## What problem does nostrnode solve?
-Using multiple Tor endpoints to speak to multiple Bitcoin related services simultaneously via a light client is an incredibly
-painful experience, massive latency and unreliability make it unworkable for the most part.
+Using multiple Tor endpoints for multiple Bitcoin related services over http simultaneously via a light client is too often
+a slow, painful experience.
 
 ## What does nostrnode do?
 Specifically, nostrnode receives encrypted rpc commands intended for Core Lightning, Join Market and Bitcoin Core. 
@@ -32,20 +32,21 @@ and use minimal resources.
 
 To connect, light clients need a keypair (which the client creates) and a subscription key to nostrnode (which nostrnode 
 creates) to gain access to all services. At present light clients require an array of sensitive, plain text credentials 
-to connect which is not only messy from a UX perspective but could also be less secure than handling them in plain text 
-via QR. Users must be extremely careful how they store their private key, if the keys are compromised you are screwed! 
-Clients should obviously handle the nostr keys themselves, however the encryption key ought to be created out of band.
+to connect which is messy from a UX perspective and could be less secure. Users must be extremely careful how they store 
+their private key, if the keys are compromised you are screwed! Clients should obviously handle the nostr keys themselves, 
+however the encryption key ought to be created out of band.
 
 If a user wants to stop remote access they just quit nostrnode, all services will remain running with rpc only exposed to 
-`localhost`. nostrnode is hardcoded to only issue rpc to `localhost`.
+`localhost`. nostrnode is hardcoded to only issue rpc to `localhost`. There is no need to forward any ports or configure 
+anything on the client side.
 
 ### It's fast!
-It is much faster than using Tor or some VPNs. That is not to say you shouldn't use nostrnode or a client without a VPN or 
-Tor! nostr is not mutually exclusive to Tor or VPNs, you can use all of the above simultaneously on clients and servers.
-We can run the nostr socket on Tor and it will still be faster than talking to multiple Tor endpoints via http.
+Websockets are faster than http requests, user's connection to their node should be more reliable too. nostr has an always 
+on, always there, instant feel to it.
 
 ## Why nostr?
-I will copy a few tidbits from the nostr repo to explain:
+- Websockets are fast
+from the nostr readme:
 - "The simplest open protocol that is able to create a censorship-resistant global "social" network once and for all."
 - "It doesn't rely on any trusted central server, hence it is resilient; it is based on cryptographic keys and signatures, 
    so it is tamper-proof; it does not rely on P2P techniques, therefore it works."
