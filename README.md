@@ -7,7 +7,7 @@ Using multiple Tor endpoints for multiple Bitcoin related services over http sim
 a slow, painful experience.
 
 ## What does nostrnode do?
-Specifically, nostrnode receives encrypted rpc commands intended for Core Lightning, Join Market and Bitcoin Core. 
+nostrnode receives encrypted rpc commands intended for Core Lightning, Join Market and Bitcoin Core. 
 nostrnode decrypts the command, builds the http request for localhost and forwards it to the correct service (identified 
 by port for now). nostrnode takes the response from said service, encrypts it, packages it into a nostr event and sends 
 it to the relay which forwards it to the client.
@@ -22,7 +22,7 @@ We have more layers of security then only relying on ssl (or whatever), you coul
 encrypted.
 
 ### easy to use
-It is extremely easy to configure and requires no real setup by the client at all other than running the required services
+Easy to configure and requires no real setup by the client at all other than running the required services
 and installing nostrnode. Rpc credentials are produced by nostrnode so that users can add them to their bitcoin.conf, as is the
 ssl cert required by Join Market and the master key required by Sparko (Core Lightning). Bitcoin Core and Core Lightning
 (thanks to Sparko) support fine-grained permissions.
