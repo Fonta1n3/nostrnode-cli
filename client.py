@@ -1,3 +1,4 @@
+import configparser
 from base64 import b64decode, b64encode
 from datetime import datetime
 from event import Event
@@ -21,16 +22,50 @@ import requests
 # TODO: Sanity checks for user input
 # TODO: One method to parse/build all commands/responses
 
+config = configparser.ConfigParser()
+parent = pathlib.Path(__file__).parents[0]
+config_path = f'{parent}/config.cfg'
+existing_config = pathlib.Path(config_path)
 
-relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
-default_relay: str = 'wss://nostr-relay.wlvs.space/'
-relay_url = input(relay_input_prompt) or default_relay
+relay_url = ''
+subscription_pubkey = ''
+btc_rpc_user = ''
+btc_rpc_pass = ''
+our_privkey_serialized = ''
+our_pubkey = ''
+sparko_key_serialized = ''
+
+if existing_config.is_file():
+    config.read('config.cfg')
+    if 'DEFAULT' in config:
+        default = config['DEFAULT']
+        if 'relay_url' in default:
+            relay_url = default['relay_url']
+        if 'subscription_pubkey' in default:
+            subscription_pubkey = default['subscription_pubkey']
+        if 'btc_rpc_user' in default:
+            btc_rpc_user = default['btc_rpc_user']
+        if 'btc_rpc_pass' in default:
+            btc_rpc_pass = default['btc_rpc_pass']
+        if 'our_privkey_serialized' in default:
+            our_privkey_serialized = default['our_privkey_serialized']
+        if 'our_pubkey' in default:
+            our_pubkey = default['our_pubkey']
+        if 'sparko_key_serialized' in default:
+            sparko_key_serialized = default['sparko_key_serialized']
+
+if relay_url == '':
+    relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
+    default_relay: str = 'wss://nostr-relay.wlvs.space/'
+    relay_url = input(relay_input_prompt) or default_relay
 
 sub_id = binascii.hexlify(os.urandom(32)).decode()
-pubkey_prompt = 'Subscription pubkey (required): '
-light_client_pubkey = input(pubkey_prompt)
 
-if light_client_pubkey == '':
+if subscription_pubkey == '':
+    pubkey_prompt = 'Subscription pubkey (required): '
+    subscription_pubkey = input(pubkey_prompt)
+
+if subscription_pubkey == '':
     print('Pubkey required, start over.')
     quit()
 
@@ -42,21 +77,41 @@ if encryption_words == "":
     print('Encryption words are required, start over.')
     quit()
 
-RPC_PASS = rpcauth.main()
-RPC_USER = 'nostrnode'
-OUR_PRIVKEY = secp256k1.PrivateKey()
-OUR_PRIVKEY_SERIALIZED = OUR_PRIVKEY.serialize()
-OUR_PUBKEY = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
-print(f'Subscribe to this pubkey (required): {OUR_PUBKEY}')
+if btc_rpc_pass == '':
+    btc_rpc_pass = rpcauth.main()
 
-SPARKO_KEY = secp256k1.PrivateKey()
-SPARKO_KEY_SERIALIZED = SPARKO_KEY.serialize()
-print(f'Add this full access Sparko key to your lightning config: {SPARKO_KEY_SERIALIZED}')
+if btc_rpc_user == '':
+    btc_rpc_user = 'nostrnode'
+
+if our_privkey_serialized == '':
+    OUR_PRIVKEY = secp256k1.PrivateKey()
+    our_privkey_serialized = OUR_PRIVKEY.serialize()
+    our_pubkey = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
+
+print(f'Subscribe to this pubkey (required): {our_pubkey}')
+
+if sparko_key_serialized == '':
+    SPARKO_KEY = secp256k1.PrivateKey()
+    sparko_key_serialized = SPARKO_KEY.serialize()
+
+print(f'Add this full access Sparko key to your lightning config: {sparko_key_serialized}')
+
+if existing_config.is_file():
+    config['DEFAULT'] = {'btc_rpc_pass': btc_rpc_pass,
+                         'btc_rpc_user': btc_rpc_user,
+                         'our_privkey_serialized': our_privkey_serialized,
+                         'our_pubkey': our_pubkey,
+                         'sparko_key_serialized': sparko_key_serialized,
+                         'subscription_pubkey': subscription_pubkey,
+                         'relay_url': relay_url}
+
+    with open('config.cfg', 'w') as configfile:
+        config.write(configfile)
 
 
 async def listen():
     async with websockets.connect(relay_url, ssl=ssl_context('cert.pem')) as ws:
-        req = ['REQ', sub_id, {'authors': [light_client_pubkey[2:]]}]
+        req = ['REQ', sub_id, {'authors': [subscription_pubkey[2:]]}]
         print(f'Sent: {req} to {relay_url}')
         await ws.send(json.dumps(req))
         while True:
@@ -185,7 +240,7 @@ def our_btc_response(btc_response, request_id):
     }
     json_response_data = json.dumps(part).encode('utf8')
     event = create_event(json_response_data)
-    event.sign(OUR_PRIVKEY_SERIALIZED)
+    event.sign(our_privkey_serialized)
     if event.is_valid():
         return json.dumps(['EVENT', event.event_data()])
     else:
@@ -198,7 +253,7 @@ def our_jm_response(json_content):
     }
     json_response_data = json.dumps(response_dict).encode('utf8')
     event = create_event(json_response_data)
-    event.sign(OUR_PRIVKEY_SERIALIZED)
+    event.sign(our_privkey_serialized)
     if event.is_valid():
         return json.dumps(['EVENT', event.event_data()])
     else:
@@ -212,7 +267,7 @@ def create_event(json_response_data):
     raw_event = f'''
     [
         0,
-        "{OUR_PUBKEY[2:]}",
+        "{our_pubkey[2:]}",
         {created_at},
         20001,
         [],
@@ -222,7 +277,7 @@ def create_event(json_response_data):
     event_id = hashlib.sha256(raw_event.encode('utf8')).hexdigest()
     event_dict = {
         'id': event_id,
-        'pubkey': OUR_PUBKEY[2:],
+        'pubkey': our_pubkey[2:],
         'created_at': created_at,
         'kind': 20001,
         'tags': [],
@@ -255,14 +310,14 @@ def make_btc_command(command, wallet, param, port, request_id):
     headers = {
         'Content-Type': 'text/plain',
     }
-    endpoint = f"http://{RPC_USER}:{RPC_PASS}@localhost:{port}"
+    endpoint = f"http://{btc_rpc_user}:{btc_rpc_pass}@localhost:{port}"
     if wallet != "":
         endpoint += f'/wallet/{wallet}'
     json_data = {'jsonrpc': '1.0', 'id': request_id, 'method': command, 'params': param}
     return requests.post(endpoint,
                          json=json_data,
                          headers=headers,
-                         auth=(f'{RPC_USER}', f'{RPC_PASS}'))
+                         auth=(f'{btc_rpc_user}', f'{btc_rpc_pass}'))
 
 
 def get_headers(param, token):
@@ -296,7 +351,7 @@ def make_jm_command(http_method, url_path, http_body, token):
 def make_cln_command(http_body):
     endpoint = "http://localhost:9737/rpc"
     headers = {
-        'X-Access': SPARKO_KEY_SERIALIZED
+        'X-Access': sparko_key_serialized
     }
     print(f'http_body: {http_body}')
     return requests.post(endpoint, json=http_body, headers=headers)
