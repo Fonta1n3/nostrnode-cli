@@ -3,6 +3,7 @@ from base64 import b64decode, b64encode
 from datetime import datetime
 from event import Event
 from getpass import getpass
+from termcolor import colored
 import websockets
 import asyncio
 import pathlib
@@ -55,7 +56,7 @@ if existing_config.is_file():
             sparko_key_serialized = default['sparko_key_serialized']
 
 if relay_url == '':
-    relay_input_prompt = 'Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): '
+    relay_input_prompt = colored('Enter your relay url (wss://nostr-relay.wlvs.space/ used by default if blank): ', 'blue')
     default_relay: str = 'wss://nostr-relay.wlvs.space/'
     relay_url = input(relay_input_prompt) or default_relay
 
@@ -66,15 +67,15 @@ if subscription_pubkey == '':
     subscription_pubkey = input(pubkey_prompt)
 
 if subscription_pubkey == '':
-    print('Pubkey required, start over.')
+    print(colored('Pubkey required, start over.', 'red'))
     quit()
 
-encryption_input_prompt = 'Enter nostr encryption words (required): '
+encryption_input_prompt = colored('Enter nostr encryption words (required): ', 'blue')
 encryption_words = getpass(encryption_input_prompt)
 encryption_words = "".join(encryption_words.split())
 
 if encryption_words == "":
-    print('Encryption words are required, start over.')
+    print(colored('Encryption words are required, start over.', 'red'))
     quit()
 
 if btc_rpc_pass == '':
@@ -88,13 +89,13 @@ if our_privkey_serialized == '':
     our_privkey_serialized = OUR_PRIVKEY.serialize()
     our_pubkey = OUR_PRIVKEY.pubkey.serialize(compressed=True).hex()
 
-print(f'Subscribe to this pubkey (required): {our_pubkey}')
+print(colored(f'Subscribe to this pubkey (required): {our_pubkey}\n', 'green'))
 
 if sparko_key_serialized == '':
     SPARKO_KEY = secp256k1.PrivateKey()
     sparko_key_serialized = SPARKO_KEY.serialize()
 
-print(f'Add this full access Sparko key to your lightning config: {sparko_key_serialized}')
+print(colored(f'Add this full access Sparko key to your lightning config: {sparko_key_serialized}\n', 'green'))
 
 if existing_config.is_file():
     config['DEFAULT'] = {'btc_rpc_pass': btc_rpc_pass,
@@ -142,42 +143,42 @@ def msg_parse(msg_json):
 
 
 def parse_event(event):
-    print(f'received event: {event}')
     for (key, value) in event.items():
         if key == 'content':
             decrypted_content = encryption.decrypt(b64decode(value), encryption_words)
             json_content = json.loads(decrypted_content)
             (command, wallet, param_json, port, request_id) = parse_received_command(json_content)
-
+            print(colored(f'Received nostr event content:\n{json_content}\n', 'magenta'))
             if is_btc_rpc(port):
                 response = make_btc_command(command, wallet, param_json, port, request_id)
-                print(f'Bitcoin Core response http status code: {response.status_code}')
-                print(response.content)
+                print(colored(f'Bitcoin Core response http status code: {response.status_code}\n', 'white'))
+                print(colored(f'{response.content}\n', 'white'))
                 json_content = parse_response(response)
                 if json_content is not None:
                     btc_response = parse_btc_response(json_content)
                     if btc_response is not None:
-                        print(f'btc_response: {btc_response}')
                         our_response_to_send = our_btc_response(btc_response, request_id)
                         if our_response_to_send is not None:
-                            print(f'send Bitcoin Core event: {our_response_to_send}')
+                            print(colored(f'Send Bitcoin Core event:\n{our_response_to_send}\n', 'blue'))
                             return our_response_to_send
 
             elif is_jm_rpc(port):
                 (http_method, url_path, http_body, token) = parse_jm_command(json_content)
                 response = make_jm_command(http_method, url_path, http_body, token)
-                print(f'Join market response http status code: {response.status_code}')
+                print(colored(f'Join market response http status code: {response.status_code}\n', 'white'))
+                print(colored(f'{response.content}\n', 'white'))
                 our_jm_response_to_send = our_jm_response(response.content)
-                print(f'send Join Market event: {our_jm_response_to_send}')
+                print(colored(f'Send Join Market event: {our_jm_response_to_send}\n', 'blue'))
                 return our_jm_response_to_send
 
             elif is_cln(port):
                 if 'http_body' in json_content:
                     http_body = json_content["http_body"]
                     response = make_cln_command(http_body)
-                    print(f'Core lightning response http status code: {response.status_code}')
+                    print(colored(f'Core lightning response http status code: {response.status_code}', 'white'))
+                    print(colored(f'{response.content}', 'white'))
                     our_cln_response = our_jm_response(response.content)
-                    print(f'send Core Lightning event: {our_cln_response}')
+                    print(colored(f'Send Core Lightning event: {our_cln_response}', 'blue'))
                     return our_cln_response
 
 
@@ -202,7 +203,6 @@ def parse_response(response):
 
 
 def parse_btc_response(json_content):
-    print(f'parse_btc_response: {json_content}')
     return json_content
 
 
@@ -244,7 +244,7 @@ def our_btc_response(btc_response, request_id):
     if event.is_valid():
         return json.dumps(['EVENT', event.event_data()])
     else:
-        print('Event invalid!')
+        print(colored('Event invalid!', 'red'))
 
 
 def our_jm_response(json_content):
@@ -257,7 +257,7 @@ def our_jm_response(json_content):
     if event.is_valid():
         return json.dumps(['EVENT', event.event_data()])
     else:
-        print('Event invalid!')
+        print(colored('Event invalid!', 'red'))
 
 
 def create_event(json_response_data):
@@ -314,6 +314,7 @@ def make_btc_command(command, wallet, param, port, request_id):
     if wallet != "":
         endpoint += f'/wallet/{wallet}'
     json_data = {'jsonrpc': '1.0', 'id': request_id, 'method': command, 'params': param}
+    print(colored(f'Bitcoin request:\n{json_data}', 'green'))
     return requests.post(endpoint,
                          json=json_data,
                          headers=headers,
@@ -336,6 +337,7 @@ def get_headers(param, token):
 def make_jm_command(http_method, url_path, http_body, token):
     endpoint = f"https://localhost:28183/{url_path}"
     cert_path = f'{pathlib.Path(__file__).parent}/jm_cert.pem'
+    print(colored(f'Join Market request:\n{endpoint}\n{http_body}', 'green'))
     if http_method == 'GET':
         return requests.get(endpoint,
                             data=http_body,
@@ -353,7 +355,7 @@ def make_cln_command(http_body):
     headers = {
         'X-Access': sparko_key_serialized
     }
-    print(f'http_body: {http_body}')
+    print(colored(f'Core Lightning request:\n{http_body}', 'green'))
     return requests.post(endpoint, json=http_body, headers=headers)
 
 
