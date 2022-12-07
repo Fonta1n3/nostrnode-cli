@@ -63,7 +63,7 @@ if relay_url == '':
 sub_id = binascii.hexlify(os.urandom(32)).decode()
 
 if subscription_pubkey == '':
-    pubkey_prompt = 'Subscription pubkey (required): '
+    pubkey_prompt = colored('Subscription pubkey (required): ', 'blue')
     subscription_pubkey = input(pubkey_prompt)
 
 if subscription_pubkey == '':
@@ -175,11 +175,19 @@ def parse_event(event):
                 if 'http_body' in json_content:
                     http_body = json_content["http_body"]
                     response = make_cln_command(http_body)
-                    print(colored(f'Core lightning response http status code: {response.status_code}', 'white'))
-                    print(colored(f'{response.content}', 'white'))
-                    our_cln_response = our_jm_response(response.content)
-                    print(colored(f'Send Core Lightning event: {our_cln_response}', 'blue'))
-                    return our_cln_response
+                    if response.status_code != 200:
+                        print(colored(response.text, 'red'))
+                        print(colored(f'Core lightning response http status code: {response.status_code}', 'red'))
+                        print(colored(f'{response.content}', 'red'))
+                        if 'message' in response.content:
+                            our_cln_response = our_jm_response(response.content)
+                            return our_cln_response
+                    else:
+                        print(colored(f'Core lightning response http status code: {response.status_code}', 'white'))
+                        print(colored(f'{response.content}', 'white'))
+                        our_cln_response = our_jm_response(response.content)
+                        print(colored(f'Send Core Lightning event: {our_cln_response}', 'blue'))
+                        return our_cln_response
 
 
 def is_btc_rpc(port):
