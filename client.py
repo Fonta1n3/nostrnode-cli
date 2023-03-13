@@ -1,9 +1,9 @@
-import configparser
 from base64 import b64decode, b64encode
 from datetime import datetime
 from event import Event
 from getpass import getpass
 from termcolor import colored
+import configparser
 import websockets
 import asyncio
 import pathlib
@@ -18,7 +18,6 @@ import hashlib
 import requests
 
 # TODO: Currently if we attempt to send a command to a service that is off nostrnode crashes
-# TODO: Create db to store credentials encrypted, removing them from memory when not in use
 # TODO: Embed a relay? join market?
 # TODO: Sanity checks for user input
 # TODO: One method to parse/build all commands/responses
@@ -110,21 +109,30 @@ if existing_config.is_file():
         config.write(configfile)
 
 
+async def listen_now(ws):
+    req = ['REQ', sub_id, {'authors': [subscription_pubkey[2:]]}]
+    print(f'Sent: {req} to {relay_url}')
+    await ws.send(json.dumps(req))
+    while True:
+        msg = await ws.recv()
+        msg_json = json.loads(msg)
+        msg_type = msg_json[0]
+        if msg_type == 'EOSE':
+            print(f'{msg_json}')
+        elif msg_type == 'EVENT':
+            event = msg_parse(msg_json)
+            if event is not None:
+                await ws.send(event)
+
+
 async def listen():
-    async with websockets.connect(relay_url, ssl=ssl_context('cert.pem')) as ws:
-        req = ['REQ', sub_id, {'authors': [subscription_pubkey[2:]]}]
-        print(f'Sent: {req} to {relay_url}')
-        await ws.send(json.dumps(req))
-        while True:
-            msg = await ws.recv()
-            msg_json = json.loads(msg)
-            msg_type = msg_json[0]
-            if msg_type == 'EOSE':
-                print(f'{msg_json}')
-            elif msg_type == 'EVENT':
-                event = msg_parse(msg_json)
-                if event is not None:
-                    await ws.send(event)
+    if relay_url.startswith("wss:"):
+        async with websockets.connect(relay_url, ssl=ssl_context('cert.pem')) as ws:
+            await listen_now(ws)
+
+    elif relay_url.startswith('ws:'):
+        async with websockets.connect(relay_url) as ws:
+            await listen_now(ws)
 
 
 def ssl_context(filename):
@@ -163,11 +171,11 @@ def parse_event(event):
                             return our_response_to_send
 
             elif is_jm_rpc(port):
-                (http_method, url_path, http_body, token) = parse_jm_command(json_content)
+                (http_method, url_path, http_body, token, request_id) = parse_jm_command(json_content)
                 response = make_jm_command(http_method, url_path, http_body, token)
                 print(colored(f'Join market response http status code: {response.status_code}\n', 'white'))
                 print(colored(f'{response.content}\n', 'white'))
-                our_jm_response_to_send = our_jm_response(response.content)
+                our_jm_response_to_send = our_jm_response(response.content, request_id)
                 print(colored(f'Send Join Market event: {our_jm_response_to_send}\n', 'blue'))
                 return our_jm_response_to_send
 
@@ -180,12 +188,12 @@ def parse_event(event):
                         print(colored(f'Core lightning response http status code: {response.status_code}', 'red'))
                         print(colored(f'{response.content}', 'red'))
                         if 'message' in response.content:
-                            our_cln_response = our_jm_response(response.content)
+                            our_cln_response = our_jm_response(response.content, request_id)
                             return our_cln_response
                     else:
                         print(colored(f'Core lightning response http status code: {response.status_code}', 'white'))
                         print(colored(f'{response.content}', 'white'))
-                        our_cln_response = our_jm_response(response.content)
+                        our_cln_response = our_jm_response(response.content, request_id)
                         print(colored(f'Send Core Lightning event: {our_cln_response}', 'blue'))
                         return our_cln_response
 
@@ -219,6 +227,7 @@ def parse_jm_command(json_content):
     http_method = None
     http_body = None
     token = None
+    request_id = None
     if 'http_method' in json_content:
         http_method = json_content["http_method"]
     if 'url_path' in json_content:
@@ -227,7 +236,9 @@ def parse_jm_command(json_content):
         http_body = json_content["http_body"]
     if 'token' in json_content:
         token = json_content["token"]
-    return http_method, url_path, http_body, token
+    if 'request_id' in json_content:
+        request_id = json_content["request_id"]
+    return http_method, url_path, http_body, token, request_id
 
 
 def our_btc_response(btc_response, request_id):
@@ -244,7 +255,7 @@ def our_btc_response(btc_response, request_id):
     part = {
         "request_id": request_id,
         "response": result,
-        "errorDesc": message
+        "error_desc": message
     }
     json_response_data = json.dumps(part).encode('utf8')
     event = create_event(json_response_data)
@@ -255,9 +266,10 @@ def our_btc_response(btc_response, request_id):
         print(colored('Event invalid!', 'red'))
 
 
-def our_jm_response(json_content):
+def our_jm_response(json_content, request_id):
     response_dict = {
-        "response": json.loads(json_content)
+        "response": json.loads(json_content),
+        "request_id": request_id
     }
     json_response_data = json.dumps(response_dict).encode('utf8')
     event = create_event(json_response_data)
